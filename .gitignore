@@ -1,0 +1,22 @@
+#Ignore everything
+**
+
+#Don't ignore these files
+!.gitignore
+!.cproject
+!.project
+!.mxproject
+!custom_esc.ioc
+!STM32F411CEUX_FLASH.ld
+!STM32F411CEUX_RAM.ld
+
+#Don't ignore these folders (and the files inside them)
+!Core/
+!Core/**
+!Drivers/
+!Drivers/**
+
+#Do ignore backups and lock files that are there only when KiCad is open
+#This is taken from a previous project and needs to be named appropriately when/if KiCad files are put into this repo
+#kicad_files/stryx_backups
+#kicad_files/~stryx.kicad_sch.lck
