@@ -10,7 +10,7 @@
 #include "bldc_control.h"
 
 static bool initialized = false;
-static uint8_t speed_percent = 0;
+static uint8_t torque_percent = 0;
 static TIM_HandleTypeDef* tim1_handle = NULL;
 
 #define PHASE_A_TIM_CHANNEL		TIM_CHANNEL_1
@@ -68,7 +68,7 @@ static RESULT_INTERNAL connect_phase_to_dc_bus(uint32_t tim_channel, bool connec
 		return RESULT_INTERNAL_INVALID_PARAMETER;
 	}
 	TIM1->CNT = 0; //Start PWM from the beginning
-	set_duty_cycle(connect_to_pos ? speed_percent : 0, tim_channel);
+	set_duty_cycle(connect_to_pos ? torque_percent : 0, tim_channel);
 	return RESULT_INTERNAL_SUCCESS;
 }
 
@@ -149,16 +149,16 @@ static RESULT_INTERNAL set_phase_connection(uint32_t timer_channel, PHASE_CONNEC
 
 uint8_t bldc_get_speed(void)
 {
-	return speed_percent;
+	return torque_percent;
 }
 
-void bldc_set_speed(uint8_t percent)
+void bldc_set_torque(uint8_t percent)
 {
 	if (percent > 100)
 	{
 		percent = 100;
 	}
-	speed_percent = percent;
+	torque_percent = percent;
 }
 
 BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1)
@@ -173,10 +173,10 @@ BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1)
 	}
 	tim1_handle = htim1;
 
-	speed_percent = 0;
-	set_duty_cycle(speed_percent, PHASE_A_TIM_CHANNEL);
-	set_duty_cycle(speed_percent, PHASE_B_TIM_CHANNEL);
-	set_duty_cycle(speed_percent, PHASE_C_TIM_CHANNEL);
+	torque_percent = 0;
+	set_duty_cycle(torque_percent, PHASE_A_TIM_CHANNEL);
+	set_duty_cycle(torque_percent, PHASE_B_TIM_CHANNEL);
+	set_duty_cycle(torque_percent, PHASE_C_TIM_CHANNEL);
 
 	HAL_TIM_PWM_Start(htim1, PHASE_A_TIM_CHANNEL);
 	HAL_TIMEx_PWMN_Start(htim1, PHASE_A_TIM_CHANNEL);
@@ -191,6 +191,64 @@ BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1)
 	return BLDC_CONTROL_RESULT_SUCCESS;
 }
 
+BLDC_CONTROL_RESULT bldc_stop_motor(void)
+{
+	set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_NEG);
+	set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_NEG);
+	set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_NEG);
+	return BLDC_CONTROL_RESULT_SUCCESS;
+}
+
+BLDC_CONTROL_RESULT bldc_set_phase_to_step(uint8_t step)
+{
+	if (!initialized)
+	{
+		return BLDC_CONTROL_RESULT_NOT_INITIALIZED;
+	}
+	switch (step)
+	{
+	case 1:
+		//Step 1
+		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_POS);
+		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_NEG);
+		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_FLOAT);
+		break;
+	case 2:
+		//Step 2
+		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_POS);
+		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_FLOAT);
+		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_NEG);
+		break;
+	case 3:
+		//Step 3
+		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_FLOAT);
+		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_POS);
+		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_NEG);
+		break;
+	case 4:
+		//Step 4
+		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_NEG);
+		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_POS);
+		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_FLOAT);
+		break;
+	case 5:
+		//Step 5
+		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_NEG);
+		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_FLOAT);
+		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_POS);
+		break;
+	case 6:
+		//Step 6
+		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_FLOAT);
+		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_NEG);
+		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_POS);
+		break;
+	default:
+		return BLDC_CONTROL_INVALID_ARGUMENT;
+	}
+	return BLDC_CONTROL_RESULT_SUCCESS;
+}
+
 BLDC_CONTROL_RESULT bldc_update_phase(void)
 {
 	if (!initialized)
@@ -198,49 +256,19 @@ BLDC_CONTROL_RESULT bldc_update_phase(void)
 		return BLDC_CONTROL_RESULT_NOT_INITIALIZED;
 	}
 
-	static uint8_t current_step = 0;
-	bldc_set_speed(speed_percent);
+	static uint8_t current_step = 1;
+	bldc_set_torque(torque_percent);
+	BLDC_CONTROL_RESULT result = bldc_set_phase_to_step(current_step);
 
-	switch (current_step)
+	if (result != BLDC_CONTROL_RESULT_SUCCESS)
 	{
-	case 0:
-		//Step 1
-		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_POS);
-		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_NEG);
-		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_FLOAT);
-		break;
-	case 1:
-		//Step 2
-		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_POS);
-		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_FLOAT);
-		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_NEG);
-		break;
-	case 2:
-		//Step 3
-		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_FLOAT);
-		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_POS);
-		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_NEG);
-		break;
-	case 3:
-		//Step 4
-		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_NEG);
-		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_POS);
-		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_FLOAT);
-		break;
-	case 4:
-		//Step 5
-		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_NEG);
-		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_FLOAT);
-		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_POS);
-		break;
-	case 5:
-		//Step 6
-		set_phase_connection(PHASE_A_TIM_CHANNEL, PHCONN_FLOAT);
-		set_phase_connection(PHASE_B_TIM_CHANNEL, PHCONN_NEG);
-		set_phase_connection(PHASE_C_TIM_CHANNEL, PHCONN_POS);
-		break;
+		return result;
 	}
 
-	current_step = (current_step + 1) % 6;
+	current_step++;
+	if (current_step > 6)
+	{
+		current_step = 1;
+	}
 	return BLDC_CONTROL_RESULT_SUCCESS;
 }
