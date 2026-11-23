@@ -11,7 +11,9 @@
 
 static bool initialized = false;
 static uint8_t torque_percent = 0;
+static uint8_t speed_percent = 0;
 static TIM_HandleTypeDef* tim1_handle = NULL;
+static TIM_HandleTypeDef* tim11_handle = NULL;
 
 #define PHASE_A_TIM_CHANNEL		TIM_CHANNEL_1
 #define PHASE_B_TIM_CHANNEL		TIM_CHANNEL_2
@@ -147,7 +149,7 @@ static RESULT_INTERNAL set_phase_connection(uint32_t timer_channel, PHASE_CONNEC
 	return config_tim_registers(timer_channel, conn);
 }
 
-uint8_t bldc_get_speed(void)
+uint8_t bldc_get_torque(void)
 {
 	return torque_percent;
 }
@@ -161,7 +163,37 @@ void bldc_set_torque(uint8_t percent)
 	torque_percent = percent;
 }
 
-BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1)
+uint8_t bldc_get_speed(void)
+{
+	return speed_percent;
+}
+
+void bldc_set_speed(uint8_t percent)
+{
+	if (percent > 100)
+	{
+		percent = 100;
+	}
+
+	if (percent == 0)
+	{
+		//We need to stop the timer
+		HAL_TIM_Base_Stop_IT(tim11_handle);
+	}
+	else if (speed_percent == 0 && percent != 0)
+	{
+		//If the speed was zero and now we want to make it not zero,
+		//we need to first start the timer
+		tim11_handle->Instance->CNT = 0; //Make sure the timer starts from zero
+		HAL_TIM_Base_Start_IT(tim11_handle);
+	}
+	speed_percent = percent;
+	const uint16_t ARR_FOR_MAX_SPEED = 650;
+	const uint16_t ARR_FOR_MIN_SPEED = 1000;
+	tim11_handle->Instance->ARR = ARR_FOR_MIN_SPEED - ((ARR_FOR_MIN_SPEED - ARR_FOR_MAX_SPEED) * (percent / 100.0f));
+}
+
+BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1, TIM_HandleTypeDef* htim11)
 {
 	if (initialized)
 	{
@@ -172,8 +204,14 @@ BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1)
 		return BLDC_CONTROL_RESULT_NULLPTR;
 	}
 	tim1_handle = htim1;
+	if (htim11 == NULL)
+	{
+		return BLDC_CONTROL_RESULT_NULLPTR;
+	}
+	tim11_handle = htim11;
 
 	torque_percent = 0;
+	speed_percent = 0;
 	set_duty_cycle(torque_percent, PHASE_A_TIM_CHANNEL);
 	set_duty_cycle(torque_percent, PHASE_B_TIM_CHANNEL);
 	set_duty_cycle(torque_percent, PHASE_C_TIM_CHANNEL);
@@ -186,6 +224,8 @@ BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1)
 
 	HAL_TIM_PWM_Start(htim1, PHASE_C_TIM_CHANNEL);
 	HAL_TIMEx_PWMN_Start(htim1, PHASE_C_TIM_CHANNEL);
+
+	HAL_TIM_Base_Start_IT(tim11_handle);
 
 	initialized = true;
 	return BLDC_CONTROL_RESULT_SUCCESS;

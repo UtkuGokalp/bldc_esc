@@ -19,11 +19,13 @@ typedef enum BLDC_CONTROL_RESULT
 	BLDC_CONTROL_INVALID_ARGUMENT,
 } BLDC_CONTROL_RESULT;
 
-BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1);
+BLDC_CONTROL_RESULT bldc_init(TIM_HandleTypeDef* htim1, TIM_HandleTypeDef* htim11);
 BLDC_CONTROL_RESULT bldc_update_phase(void);
 BLDC_CONTROL_RESULT bldc_set_phase_to_step(uint8_t step);
 BLDC_CONTROL_RESULT bldc_stop_motor(void);
-uint8_t bldc_get_speed(void);
+uint8_t bldc_get_torque(void);
 void bldc_set_torque(uint8_t percent);
+uint8_t bldc_get_speed(void);
+void bldc_set_speed(uint8_t percent);
 
 #endif /* INC_BLDC_CONTROL_H_ */
